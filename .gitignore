@@ -1,0 +1,37 @@
+# 빌드·배포 결과
+/bin/
+/dist/
+/artifacts/
+*.exe
+*.pdb
+*.zip
+*.lnk
+
+# 로컬 설정·인증·사용량 기록
+.env
+.env.*
+!.env.example
+auth.json
+settings.json
+history.json
+alerts.json
+probe-result.json
+layout-result.json
+unused-demo-history.json
+*.tmp
+*.log
+
+# 편집기·개인 작업 환경
+/.codex/
+/.agents/
+/.vs/
+/.vscode/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+
+# 로컬 게시 준비 문서
+/GitHub 업로드 가이드.md
+/릴리스 안내.md
+/RELEASE-English.txt

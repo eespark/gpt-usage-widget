@@ -1,0 +1,32 @@
+name: Windows 빌드 및 검증
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 소스 가져오기
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: 빌드·검증·배포 파일 생성
+        shell: pwsh
+        run: ./package.ps1
+      - name: 배포 파일 보관
+        uses: actions/upload-artifact@v7
+        with:
+          name: GPTUsageWidget-win-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14
