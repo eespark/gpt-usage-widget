@@ -244,6 +244,35 @@ namespace CodexUsageTaskbar
                 chart.DrawToBitmap(bitmap,chart.ClientRectangle);
                 Check(bitmap.GetPixel(0,0).R>200,"History chart renders the selected longer period offscreen");
             }
+            var gapChart=new UsageHistory(Path.Combine(root,"chart-gaps.json"));
+            long gapStart=now.AddHours(-2).ToUnixTimeSeconds();
+            gapChart.Samples.Add(new HistorySample {At=gapStart,Five=80,FiveReset=gapStart+86400});
+            gapChart.Samples.Add(new HistorySample {At=gapStart+3600,Five=80,FiveReset=gapStart+86400});
+            using(var bitmap=new Bitmap(120,100))using(var graphics=Graphics.FromImage(bitmap)) {
+                graphics.Clear(Color.White);
+                HistoryCanvas.DrawSeries(graphics,new RectangleF(10,10,100,80),gapChart,DateTimeOffset.FromUnixTimeSeconds(gapStart),DateTimeOffset.FromUnixTimeSeconds(gapStart+3600),false,Color.Blue,1);
+                int colored=0,blank=0;for(int x=20;x<100;x++){if(bitmap.GetPixel(x,26).B>bitmap.GetPixel(x,26).R)colored++;else blank++;}
+                Check(colored>0&&blank==0,"Observation gaps are connected with a solid visual line");
+                gapChart.Samples[1].FiveReset++;
+                graphics.Clear(Color.White);
+                HistoryCanvas.DrawSeries(graphics,new RectangleF(10,10,100,80),gapChart,DateTimeOffset.FromUnixTimeSeconds(gapStart),DateTimeOffset.FromUnixTimeSeconds(gapStart+3600),false,Color.Blue,1);
+                Check(bitmap.GetPixel(50,26).B>bitmap.GetPixel(50,26).R,"Small reset timestamp changes do not interrupt the observed line");
+                gapChart.Samples[1].Five=90;
+                graphics.Clear(Color.White);
+                HistoryCanvas.DrawSeries(graphics,new RectangleF(10,10,100,80),gapChart,DateTimeOffset.FromUnixTimeSeconds(gapStart),DateTimeOffset.FromUnixTimeSeconds(gapStart+3600),false,Color.Blue,1);
+                Check(bitmap.GetPixel(50,26).ToArgb()==Color.White.ToArgb(),"Reset cycles are never bridged by the history chart");
+                Check(bitmap.GetPixel(108,18).ToArgb()==Color.White.ToArgb(),"Reset observations below 100% do not receive a start marker");
+                Check(bitmap.GetPixel(8,26).B>bitmap.GetPixel(8,26).R,"Last observation before reset receives a small endpoint ring");
+                gapChart.Samples[1].Five=100;
+                graphics.Clear(Color.White);
+                HistoryCanvas.DrawSeries(graphics,new RectangleF(10,10,100,80),gapChart,DateTimeOffset.FromUnixTimeSeconds(gapStart),DateTimeOffset.FromUnixTimeSeconds(gapStart+3600),false,Color.Blue,1);
+                Check(bitmap.GetPixel(108,10).B>bitmap.GetPixel(108,10).R,"Reset to 100% receives a small ring marker");
+                gapChart.Samples[1].Five=0;
+                graphics.Clear(Color.White);
+                HistoryCanvas.DrawSeries(graphics,new RectangleF(10,10,100,80),gapChart,DateTimeOffset.FromUnixTimeSeconds(gapStart),DateTimeOffset.FromUnixTimeSeconds(gapStart+3600),false,Color.Blue,1);
+                Check(bitmap.GetPixel(110,92).B>bitmap.GetPixel(110,92).R,"Exhausted quota receives one endpoint ring");
+                Check(gapChart.Consumption(DateTimeOffset.FromUnixTimeSeconds(gapStart),DateTimeOffset.FromUnixTimeSeconds(gapStart+3600),false)==0,"Visual gap connections do not add unobserved consumption");
+            }
             foreach(int density in new[]{96,192})using(var bitmap=new Bitmap(720,620)) {
                 bitmap.SetResolution(density,density);
                 using(var graphics=Graphics.FromImage(bitmap))

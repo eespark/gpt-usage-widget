@@ -158,7 +158,7 @@ namespace CodexUsageTaskbar
                     try
                     {
                         await Send(current, new { id = 1, method = "initialize", @params = new { clientInfo = new {
-                            name = "gpt_usage_widget", title = "GPT Usage Widget", version = "1.0.0" } } });
+                            name = "gpt_usage_widget", title = "GPT Usage Widget", version = "1.0.1" } } });
                         stage = "initialize/read";
                         await Receive(current, 1);
                         stage = "initialized/send";

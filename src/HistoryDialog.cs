@@ -132,8 +132,9 @@ namespace CodexUsageTaskbar
                     float y=chart.Top+chart.Height*i/2; g.DrawLine(grid,chart.Left,y,chart.Right,y);
                     g.DrawString((100-i*50).ToString(),body,muted,20*s,y-8*s);
                 }
-                DrawSeries(g,chart,history,start,end,false,Widget.Accent,s);
-                Color weeklyColor=Color.FromArgb(111,157,255);
+                Color fiveColor=Color.FromArgb(37,99,235);
+                DrawSeries(g,chart,history,start,end,false,fiveColor,s);
+                Color weeklyColor=Color.FromArgb(139,92,246);
                 DrawSeries(g,chart,history,start,end,true,weeklyColor,s);
                 for(int i=0;i<=4;i++) {
                     var at=ExpiryDisplay.InKorea(start.AddDays(RangeDays*i/4.0)); float x=chart.Left+chart.Width*i/4;
@@ -145,7 +146,7 @@ namespace CodexUsageTaskbar
                 double bucketHours=RangeDays==1?1:RangeDays;
                 double max=1; var five=new double[24]; var week=new double[24];
                 for(int i=0;i<24;i++) { var a=hour.AddHours(i*bucketHours); five[i]=history.Consumption(a,a.AddHours(bucketHours),false); week[i]=history.Consumption(a,a.AddHours(bucketHours),true); max=Math.Max(max,Math.Max(five[i],week[i])); }
-                using(var blue=new SolidBrush(Widget.Accent)) using(var purple=new SolidBrush(weeklyColor)) {
+                using(var blue=new SolidBrush(fiveColor)) using(var purple=new SolidBrush(weeklyColor)) {
                     float step=bars.Width/24;
                     for(int i=0;i<24;i++) {
                         float a=(float)(bars.Height*five[i]/max),b=(float)(bars.Height*week[i]/max);
@@ -158,7 +159,7 @@ namespace CodexUsageTaskbar
                 using(var baseline=new Pen(p.Divider,s))g.DrawLine(baseline,bars.Left,bars.Bottom,bars.Right,bars.Bottom);
                 for(int i=0;i<24;i+=6)g.DrawString(ExpiryDisplay.InKorea(hour.AddHours(i*bucketHours)).ToString(RangeDays==1?"HH:mm":"MM/dd"),body,muted,bars.Left+bars.Width*i/24-12*s,bars.Bottom+3*s);
                 g.DrawString("0",body,muted,28*s,bars.Bottom-8*s);g.DrawString(max.ToString("0.#"),body,muted,18*s,bars.Top-8*s);
-                g.DrawString(Ui.Text("관측하지 못한 시간은 소모량을 추정하지 않습니다. 모든 시간은 한국 시간입니다."),body,muted,24*s,Height-30*s);
+                Line(g,Ui.Text("○ 100% 시작·소진·초기화 직전 · 조회 공백은 계산 제외 · 한국 시간"),body,muted,24*s,Height-30*s,Width-48*s,22*s);
                 if(history.Samples.Count<2)g.DrawString(Ui.Text("기록을 수집 중입니다. 사용 구간과 휴식 패턴이 쌓이면 추정합니다."),body,muted,chart.Left+8*s,chart.Top+45*s);
             }
         }
@@ -175,16 +176,34 @@ namespace CodexUsageTaskbar
         }
         public static void DrawSeries(Graphics g,RectangleF rect,UsageHistory history,DateTimeOffset start,DateTimeOffset end,bool weekly,Color color,float scale)
         {
-            var samples=history.Samples.Where(x=>x.At>=start.ToUnixTimeSeconds()&&x.At<=end.ToUnixTimeSeconds()).ToArray();
+            var samples=history.Samples.Where(x=>x.At>=start.ToUnixTimeSeconds()&&x.At<=end.ToUnixTimeSeconds()&&(weekly?x.Week:x.Five).HasValue).OrderBy(x=>x.At).ToArray();
+            double seconds=(end-start).TotalSeconds;
+            if(seconds<=0)return;
+            var resets=new System.Collections.Generic.List<PointF>();
+            Func<HistorySample,PointF> pointOf=x=>new PointF(rect.Left+(float)((x.At-start.ToUnixTimeSeconds())/seconds*rect.Width),rect.Bottom-(float)((weekly?x.Week.Value:x.Five.Value)/100*rect.Height));
+            if(samples.Length>0&&Math.Abs((weekly?samples[0].Week.Value:samples[0].Five.Value)-100)<.000001)resets.Add(pointOf(samples[0]));
             using(var pen=new Pen(color,1.8f*scale))for(int i=1;i<samples.Length;i++) {
                 var a=samples[i-1];var b=samples[i];double? av=weekly?a.Week:a.Five,bv=weekly?b.Week:b.Five;
                 long? ar=weekly?a.WeekReset:a.FiveReset,br=weekly?b.WeekReset:b.FiveReset;
-                if(!av.HasValue||!bv.HasValue||b.At-a.At>600||ar!=br)continue;
-                double seconds=(end-start).TotalSeconds;
+                if(!av.HasValue||!bv.HasValue||b.At<=a.At)continue;
                 var left=new PointF(rect.Left+(float)((a.At-start.ToUnixTimeSeconds())/seconds*rect.Width),rect.Bottom-(float)(av.Value/100*rect.Height));
                 var right=new PointF(rect.Left+(float)((b.At-start.ToUnixTimeSeconds())/seconds*rect.Width),rect.Bottom-(float)(bv.Value/100*rect.Height));
+                // 예정 시각의 작은 갱신은 주기 변경이 아닙니다. 실제 증가나 초기화 경계만 구분합니다.
+                if(bv.Value>av.Value+.000001||(ar.HasValue&&br.HasValue&&ar!=br&&ar.Value>a.At&&ar.Value<=b.At)) {
+                    resets.Add(left);
+                    if(Math.Abs(bv.Value-100)<.000001)resets.Add(right);
+                    continue;
+                }
+                // 조회 공백은 실선으로만 연결하며 소비량·예측 계산에는 포함하지 않습니다.
                 g.DrawLine(pen,left,right);
             }
+            if(samples.Length>0&&Math.Abs(weekly?samples[samples.Length-1].Week.Value:samples[samples.Length-1].Five.Value)<.000001)resets.Add(pointOf(samples[samples.Length-1]));
+            using(var outline=new Pen(color,1.2f*scale))using(var fill=new SolidBrush(Color.White))
+                foreach(var point in resets.Distinct()) {
+                    float radius=2.25f*scale;
+                    var marker=new RectangleF(point.X-radius,point.Y-radius,radius*2,radius*2);
+                    g.FillEllipse(fill,marker);g.DrawEllipse(outline,marker);
+                }
         }
     }
 }

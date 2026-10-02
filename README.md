@@ -28,7 +28,7 @@ Settings:
 2. Download a Windows x64 ZIP from [Releases](https://github.com/eespark/gpt-usage-widget/releases) and extract it.
 3. Run `GPTUsageWidget.en.exe` for English or `GPTUsageWidget.exe` for Korean.
 
-The English archive is `GPTUsageWidget-v1.0.0-win-x64-en.zip`; the Korean archive is `GPTUsageWidget-v1.0.0-win-x64.zip`. If no release has been published, build from source using the instructions below.
+The English archive is `GPTUsageWidget-v1.0.1-win-x64-en.zip`; the Korean archive is `GPTUsageWidget-v1.0.1-win-x64.zip`. If no release has been published, build from source using the instructions below.
 
 ## Requirements and sign-in
 

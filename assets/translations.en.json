@@ -242,5 +242,6 @@
   "설정": "Settings",
   "표시": "Appearance",
   "알림": "Notifications",
-  "기록과 조회": "History and refresh"
+  "기록과 조회": "History and refresh",
+  "○ 100% 시작·소진·초기화 직전 · 조회 공백은 계산 제외 · 한국 시간": "○ 100% start, exhaustion, pre-reset · Gaps excluded from calculations · KST"
 }
