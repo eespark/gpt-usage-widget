@@ -27,8 +27,9 @@ namespace CodexUsageTaskbar
             back.Click+=delegate {if(BackRequested!=null)BackRequested();};toolbar.Controls.Add(back);
             periods=new UpwardComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=(int)(130*scale),FlatStyle=FlatStyle.Flat,BackColor=palette.Card,ForeColor=palette.Ink};
             var days=new[]{1,7,30,90,180,365}.Where(x=>x<=settings.HistoryDays).ToArray();
-            foreach(int day in days)periods.Items.Add(day==1?Ui.Text("최근 24시간"):Ui.Text("최근 ")+day+Ui.Text("일"));periods.SelectedIndex=0;
-            periods.SelectedIndexChanged+=delegate {canvas.RangeDays=days[periods.SelectedIndex];canvas.Invalidate();};toolbar.Controls.Add(periods);
+            foreach(int day in days)periods.Items.Add(day==1?Ui.Text("최근 24시간"):Ui.Text("최근 ")+day+Ui.Text("일"));periods.SelectedIndex=Math.Max(0,Array.IndexOf(days,settings.HistoryRangeDays));
+            canvas.RangeDays=days[periods.SelectedIndex];
+            periods.SelectedIndexChanged+=delegate {canvas.RangeDays=days[periods.SelectedIndex];settings.HistoryRangeDays=canvas.RangeDays;settings.Save();canvas.Invalidate();};toolbar.Controls.Add(periods);
             Controls.Add(toolbar);Resize+=delegate {LayoutCanvas();};LayoutCanvas();
             AccessibleName=Ui.Text("사용량 상세 패널의 사용 추이 화면");
             refresh.Tick+=delegate {canvas.Invalidate();};refresh.Start();
@@ -78,8 +79,9 @@ namespace CodexUsageTaskbar
             var periods=new ComboBox {DropDownStyle=ComboBoxStyle.DropDownList,Width=120};
             var days=new[]{1,7,30,90,180,365}.Where(x=>x<=settings.HistoryDays).ToArray();
             foreach(int day in days)periods.Items.Add(day==1?Ui.Text("최근 24시간"):Ui.Text("최근 ")+day+Ui.Text("일"));
-            periods.SelectedIndex=0;
-            periods.SelectedIndexChanged+=delegate {canvas.RangeDays=days[periods.SelectedIndex];canvas.Invalidate();};
+            periods.SelectedIndex=Math.Max(0,Array.IndexOf(days,settings.HistoryRangeDays));
+            canvas.RangeDays=days[periods.SelectedIndex];
+            periods.SelectedIndexChanged+=delegate {canvas.RangeDays=days[periods.SelectedIndex];settings.HistoryRangeDays=canvas.RangeDays;settings.Save();canvas.Invalidate();};
             var toolbar=new FlowLayoutPanel {Dock=DockStyle.Top,Height=36,Padding=new Padding(24,4,0,0),BackColor=Palette.For(settings.DarkTheme).Background};
             toolbar.Controls.Add(periods);Controls.Add(toolbar);
             refresh.Tick += delegate { if (latest != null) canvas.UpdateSnapshot(latest()); canvas.Invalidate(); };
@@ -95,7 +97,7 @@ namespace CodexUsageTaskbar
         public HistoryCanvas(UsageHistory store, UsageSnapshot snapshot, Settings preferences, float? dpiScale = null)
         {
             history=store; data=snapshot; settings=preferences; layoutScale=dpiScale; DoubleBuffered=true;
-            RangeDays=1; AccessibleName=Ui.Text("선택 기간의 잔량과 구간별 관측 소모량 및 추가 사용 가능 시간 추정");
+            RangeDays=settings.HistoryRangeDays; AccessibleName=Ui.Text("선택 기간의 잔량과 구간별 관측 소모량 및 추가 사용 가능 시간 추정");
         }
         public void UpdateSnapshot(UsageSnapshot snapshot) { data = snapshot; }
         protected override void OnPaint(PaintEventArgs e)

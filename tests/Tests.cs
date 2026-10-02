@@ -245,6 +245,25 @@ namespace CodexUsageTaskbar
                 Check(bitmap.GetPixel(0,0).R>200,"History chart renders the selected longer period offscreen");
             }
             var gapChart=new UsageHistory(Path.Combine(root,"chart-gaps.json"));
+            string reloadPath=Path.Combine(root,"reload-history.json");
+            var reloadHistory=new UsageHistory(reloadPath);
+            LocalData.Write(reloadPath,new[]{new HistorySample {At=now.AddHours(-3).ToUnixTimeSeconds(),Five=80,Week=60}});
+            string beforeReload=File.ReadAllText(reloadPath);
+            reloadHistory.ReloadStoredSamples();
+            Check(reloadHistory.Samples.Count==1,"Opening history can recover stored records absent from memory");
+            Check(File.ReadAllText(reloadPath)==beforeReload,"Reloading history does not rewrite the stored file");
+            File.WriteAllText(reloadPath,"invalid JSON");reloadHistory.ReloadStoredSamples();
+            Check(reloadHistory.Samples.Count==1,"A temporarily unreadable history file does not clear existing records");
+            var rangeSettings=new Settings {HistoryRangeDays=7};
+            string rangePath=Path.Combine(root,"range-settings.json");
+            LocalData.Write(rangePath,rangeSettings);
+            var reloadedRange=LocalData.Read<Settings>(rangePath);
+            using(var page=new HistoryPage(store,current,reloadedRange,1)) {
+                var savedCanvas=(HistoryCanvas)((System.Windows.Forms.Panel)page.Controls[0]).Controls[0];
+                Check(savedCanvas.RangeDays==7,"Reopened history restores the persisted seven-day view");
+            }
+            rangeSettings.HistoryRangeDays=365;rangeSettings.HistoryDays=30;rangeSettings.Normalize();
+            Check(rangeSettings.HistoryRangeDays==30,"History view is clamped when retention becomes shorter");
             long gapStart=now.AddHours(-2).ToUnixTimeSeconds();
             gapChart.Samples.Add(new HistorySample {At=gapStart,Five=80,FiveReset=gapStart+86400});
             gapChart.Samples.Add(new HistorySample {At=gapStart+3600,Five=80,FiveReset=gapStart+86400});

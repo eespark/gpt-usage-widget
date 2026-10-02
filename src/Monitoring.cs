@@ -147,6 +147,17 @@ namespace CodexUsageTaskbar
             Samples=Samples.Where(x=>x.At>=cutoff).GroupBy(x=>new {Bucket=x.At<detailed?x.At/300:x.At,Old=x.At<detailed,x.FiveReset,x.WeekReset}).Select(x=>x.Last()).OrderBy(x=>x.At).ToList();
         }
         public void ApplyRetention() { Compact(DateTimeOffset.Now); StorageFailed=!LocalData.Write(path,Samples); }
+        public void ReloadStoredSamples()
+        {
+            var stored=LocalData.Read<List<HistorySample>>(path);
+            if(stored==null)return;
+            long cutoff=DateTimeOffset.Now.AddDays(-preferences.HistoryDays).ToUnixTimeSeconds();
+            long latest=DateTimeOffset.Now.AddMinutes(1).ToUnixTimeSeconds();
+            Samples=Samples.Concat(stored.Where(x=>x!=null&&x.At>=cutoff&&x.At<=latest&&Valid(x.Five)&&Valid(x.Week)))
+                .GroupBy(x=>x.At).Select(x=>x.Last()).OrderBy(x=>x.At).ToList();
+            Compact(DateTimeOffset.Now);
+            forecastCache[0]=forecastCache[1]=null;
+        }
         static bool Valid(double? percent) { return !percent.HasValue || (!double.IsNaN(percent.Value) && !double.IsInfinity(percent.Value) && percent >= 0 && percent <= 100); }
         public void Record(UsageSnapshot data)
         {

@@ -136,6 +136,7 @@ namespace CodexUsageTaskbar
         void OpenHistory()
         {
             hoverTimer.Stop();
+            history.ReloadStoredSamples();
             PresentDetails(DetailText());
             details.ShowHistory(history,snapshot,settings,Bounds,scale);
         }

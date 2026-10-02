@@ -33,11 +33,12 @@ namespace CodexUsageTaskbar
         public bool EfficientPolling { get; set; }
         public bool HistoryEnabled { get; set; }
         public int HistoryDays { get; set; }
+        public int HistoryRangeDays { get; set; }
         public int ForecastDays { get; set; }
         public Settings()
         {
             FontSize = 12; BarWidth = 74; BarThickness = 5;
-            HistoryDays = 90; ForecastDays = 7;
+            HistoryDays = 90; HistoryRangeDays = 1; ForecastDays = 7;
             FiveHourLowAlert=WeeklyLowAlert=true; FiveHourLowPercent=WeeklyLowPercent=20;
             FiveHourResetMinutes=60; WeeklyResetMinutes=1440;
             WeeklyReminderDays=1; WeeklyReminderHour=12; WeeklyReminderMinute=30;
@@ -60,6 +61,8 @@ namespace CodexUsageTaskbar
             WeeklyReminderHour=Math.Max(0,Math.Min(23,WeeklyReminderHour));
             WeeklyReminderMinute=Math.Max(0,Math.Min(59,WeeklyReminderMinute));
             if (HistoryDays != 30 && HistoryDays != 90 && HistoryDays != 180 && HistoryDays != 365) HistoryDays = 90;
+            if (HistoryRangeDays != 1 && HistoryRangeDays != 7 && HistoryRangeDays != 30 && HistoryRangeDays != 90 && HistoryRangeDays != 180 && HistoryRangeDays != 365) HistoryRangeDays = 1;
+            if (HistoryRangeDays > HistoryDays) HistoryRangeDays = HistoryDays;
             if (ForecastDays != 1 && ForecastDays != 3 && ForecastDays != 7 && ForecastDays != 14) ForecastDays = 7;
             if (!ShowReset && !ShowUsage && !ShowRemaining) ShowUsage = true;
         }

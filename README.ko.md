@@ -24,7 +24,7 @@ Windows 작업표시줄의 시계 왼쪽에 현재 Codex 계정의 남은 5시�
 
 **처음 사용하는 분:** [다운로드(Releases)](https://github.com/eespark/gpt-usage-widget/releases)에서 Windows x64 ZIP을 받아 압축을 해제한 뒤 실행합니다. [사용 가이드](사용%20가이드.md)를 참고하세요. 실행 파일이 아직 게시되지 않았거나 소스 코드만 받았다면 아래 빌드 절차를 먼저 진행합니다.
 
-영어판은 `GPTUsageWidget-v1.0.1-win-x64-en.zip`으로 별도 배포합니다. 영어 사용 안내는 [영어 README](README.md)로 통합했으며 영어 ZIP에도 같은 문서를 포함합니다. 한국어판의 위젯·상세 패널 제목은 `GPT 사용량`, 영어판은 `GPT Usage`입니다. 영어판도 한국 시간(KST, UTC+9)을 사용하며 두 언어판은 같은 로컬 설정·기록을 공유하므로 하나만 실행합니다.
+영어판은 `GPTUsageWidget-v1.0.2-win-x64-en.zip`으로 별도 배포합니다. 영어 사용 안내는 [영어 README](README.md)로 통합했으며 영어 ZIP에도 같은 문서를 포함합니다. 한국어판의 위젯·상세 패널 제목은 `GPT 사용량`, 영어판은 `GPT Usage`입니다. 영어판도 한국 시간(KST, UTC+9)을 사용하며 두 언어판은 같은 로컬 설정·기록을 공유하므로 하나만 실행합니다.
 
 ## 언어별 빌드와 배포
 
