@@ -253,6 +253,24 @@ namespace CodexUsageTaskbar
                 Check(bitmap.GetPixel(0,0).R>200,"History chart renders the selected longer period offscreen");
             }
             var gapChart=new UsageHistory(Path.Combine(root,"chart-gaps.json"));
+            string shared=Path.Combine(root,"shared-data"),normal=Path.Combine(root,"normal-data"),isolated=Path.Combine(root,"isolated-data");
+            Directory.CreateDirectory(normal);Directory.CreateDirectory(isolated);
+            long migratingAt=now.AddHours(-2).ToUnixTimeSeconds();
+            LocalData.Write(Path.Combine(normal,"history.json"),new[]{new HistorySample{At=migratingAt,Five=80},new HistorySample{At=migratingAt+60,Five=75}});
+            LocalData.Write(Path.Combine(isolated,"history.json"),new[]{new HistorySample{At=migratingAt,Week=70},new HistorySample{At=migratingAt+120,Week=65}});
+            Check(StorageMigration.MergeInto(shared,new[]{normal,isolated},now),"Both normal and isolated legacy storage locations migrate successfully");
+            var unified=new UsageHistory(Path.Combine(shared,"history.json"));
+            Check(unified.Samples.Count==3&&unified.Samples[0].Five==80&&unified.Samples[0].Week==70,"Migration unions timestamps and preserves both quota fields at duplicate timestamps");
+            StorageMigration.MergeInto(shared,new[]{isolated,normal},now);
+            Check(new UsageHistory(Path.Combine(shared,"history.json")).Samples.Count==3,"Repeated startup with reversed storage order does not duplicate or lose records");
+            unified.Clear();StorageMigration.MergeInto(shared,new[]{normal,isolated},now);
+            Check(new UsageHistory(Path.Combine(shared,"history.json")).Samples.Count==0,"Explicit history deletion is not undone by legacy migration");
+            var afterClear=DateTimeOffset.Now.AddSeconds(10);
+            LocalData.Write(Path.Combine(normal,"history.json"),new[]{new HistorySample{At=migratingAt,Five=80},new HistorySample{At=afterClear.ToUnixTimeSeconds(),Five=60}});
+            StorageMigration.MergeInto(shared,new[]{normal},afterClear.AddSeconds(1));
+            Check(new UsageHistory(Path.Combine(shared,"history.json")).Samples.Count==1,"After deletion only newly collected legacy records are imported");
+            File.WriteAllText(Path.Combine(shared,"history.json"),"invalid JSON");File.Delete(Path.Combine(shared,"history.json.bak"));
+            Check(!StorageMigration.MergeInto(shared,new[]{normal,isolated},now)&&File.ReadAllText(Path.Combine(shared,"history.json"))=="invalid JSON","Unreadable shared history is never overwritten during migration");
             var drift=new UsageHistory(Path.Combine(root,"reset-drift.json"));
             long driftStart=now.AddHours(-3).ToUnixTimeSeconds()/900*900;
             for(int i=0;i<=12;i++)drift.Samples.Add(new HistorySample {At=driftStart+i*300,Five=100-i,Week=90-i,FiveReset=driftStart+86400+i*2,WeekReset=driftStart+604800+i*2});

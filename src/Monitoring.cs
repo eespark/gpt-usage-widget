@@ -8,7 +8,7 @@ namespace CodexUsageTaskbar
 {
     public static class LocalData
     {
-        public static string DirectoryPath { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GPTUsageTaskbar"); } }
+        public static string DirectoryPath { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".gpt-usage-widget"); } }
         public static T Read<T>(string path) where T : class
         {
             try { return new JavaScriptSerializer { MaxJsonLength = 64000000 }.Deserialize<T>(File.ReadAllText(path)); }
@@ -208,6 +208,7 @@ namespace CodexUsageTaskbar
         }
         public void Clear()
         {
+            if(!StorageMigration.MarkHistoryCleared(Path.GetDirectoryName(path),DateTimeOffset.Now.ToUnixTimeSeconds())){StorageFailed=true;return;}
             Samples.Clear();readFailed=false;StorageFailed = !LocalData.Write(path, Samples);
             // 명시적 삭제 이후 백업에서 기록이 되살아나지 않도록 합니다.
             try {if(File.Exists(path+".bak"))File.Delete(path+".bak");}catch(IOException){}catch(UnauthorizedAccessException){}

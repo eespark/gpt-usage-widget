@@ -137,9 +137,15 @@ namespace CodexUsageTaskbar
             using (var mutex = new Mutex(true, "Local\\CodexUsageTaskbar", out created))
             {
                 if (!created) return 0;
+                Directory.CreateDirectory(LocalData.DirectoryPath);
+                FileStream lease;
+                try {lease=new FileStream(Path.Combine(LocalData.DirectoryPath,"instance.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}
+                catch(IOException){return 0;}
+                using(lease) {
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new Widget(args.Contains("--demo")));
+                }
             }
             return 0;
         }

@@ -68,6 +68,7 @@ namespace CodexUsageTaskbar
         }
         public static Settings Load()
         {
+            StorageMigration.Migrate();
             var settings = LocalData.Read<Settings>(SettingsPath) ??
                 LocalData.Read<Settings>(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json")) ?? new Settings();
             settings.Normalize(); return settings;

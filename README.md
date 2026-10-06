@@ -57,7 +57,9 @@ Lines visually join polling gaps; unobserved consumption is excluded from calcul
 
 Retention is 90 days by default, selectable as 30/90/180/365 days. Display range and retention are separate. Select a longer range if older records are outside the current view. Records that were never collected cannot be recovered afterward.
 
-Settings and records are stored in `%LOCALAPPDATA%\GPTUsageTaskbar\` on each PC, without automatic synchronization. Saving history retains a recovery backup. **Delete history** removes both records and the backup. Expired records do not return when retention is increased.
+Settings and records are stored in `%USERPROFILE%\.gpt-usage-widget\` on each PC, without automatic synchronization. Saving history retains a recovery backup. **Delete history** removes both records and the backup. Expired records do not return when retention is increased.
+
+Records from older storage locations are automatically merged into the shared folder after updating. Original legacy files are retained.
 
 The widget does not store passwords, API keys, or conversations. Quota retrieval uses your existing Codex sign-in and internet connection.
 

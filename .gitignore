@@ -17,6 +17,8 @@ history.json
 history.json.bak
 monitor-status.json
 history-view.json
+storage-migration.json
+instance.lock
 alerts.json
 probe-result.json
 layout-result.json
