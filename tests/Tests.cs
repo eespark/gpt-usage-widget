@@ -268,7 +268,16 @@ namespace CodexUsageTaskbar
             var afterClear=DateTimeOffset.Now.AddSeconds(10);
             LocalData.Write(Path.Combine(normal,"history.json"),new[]{new HistorySample{At=migratingAt,Five=80},new HistorySample{At=afterClear.ToUnixTimeSeconds(),Five=60}});
             StorageMigration.MergeInto(shared,new[]{normal},afterClear.AddSeconds(1));
-            Check(new UsageHistory(Path.Combine(shared,"history.json")).Samples.Count==1,"After deletion only newly collected legacy records are imported");
+            Check(new UsageHistory(Path.Combine(shared,"history.json")).Samples.Count==0,"Completed migration does not import later changes from retired storage");
+            Check(LocalData.Read<StorageMigrationState>(Path.Combine(shared,"storage-migration.json")).Completed,"Successful migration persists completion across restart and history deletion");
+            string emptyMigration=Path.Combine(root,"empty-migration");
+            Check(StorageMigration.MergeInto(emptyMigration,new[]{Path.Combine(root,"absent-legacy")},now)&&LocalData.Read<StorageMigrationState>(Path.Combine(emptyMigration,"storage-migration.json")).Completed,"New installations finish migration even without legacy files");
+            string failedMigration=Path.Combine(root,"failed-migration"),brokenLegacy=Path.Combine(root,"broken-legacy");
+            Directory.CreateDirectory(brokenLegacy);File.WriteAllText(Path.Combine(brokenLegacy,"history.json"),"invalid JSON");
+            Check(!StorageMigration.MergeInto(failedMigration,new[]{brokenLegacy},now),"Unreadable legacy history leaves migration available for retry");
+            LocalData.Write(Path.Combine(brokenLegacy,"history.json"),new[]{new HistorySample{At=migratingAt,Five=80}});
+            Check(StorageMigration.MergeInto(failedMigration,new[]{brokenLegacy},now)&&new UsageHistory(Path.Combine(failedMigration,"history.json")).Samples.Count==1,"A failed migration can recover successfully on a later startup");
+            File.Delete(Path.Combine(shared,"storage-migration.json"));File.Delete(Path.Combine(shared,"storage-migration.json.bak"));
             File.WriteAllText(Path.Combine(shared,"history.json"),"invalid JSON");File.Delete(Path.Combine(shared,"history.json.bak"));
             Check(!StorageMigration.MergeInto(shared,new[]{normal,isolated},now)&&File.ReadAllText(Path.Combine(shared,"history.json"))=="invalid JSON","Unreadable shared history is never overwritten during migration");
             var drift=new UsageHistory(Path.Combine(root,"reset-drift.json"));

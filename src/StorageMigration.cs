@@ -12,6 +12,7 @@ namespace CodexUsageTaskbar
     {
         public Dictionary<string,string> Sources=new Dictionary<string,string>();
         public long HistoryClearedAt;
+        public bool Completed;
     }
     public static class StorageMigration
     {
@@ -19,6 +20,7 @@ namespace CodexUsageTaskbar
         static extern uint GetFinalPathNameByHandle(IntPtr handle,StringBuilder name,uint size,uint flags);
         public static void Migrate()
         {
+            if(IsCompleted(LocalData.DirectoryPath))return;
             string local=Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var sources=new List<string>{Path.Combine(local,"GPTUsageTaskbar")};
             string packages=Path.Combine(local,"Packages");
@@ -27,8 +29,14 @@ namespace CodexUsageTaskbar
                     string candidate=Path.Combine(package,"LocalCache","Local","GPTUsageTaskbar");
                     if(Directory.Exists(candidate))sources.Add(candidate);
                 }
-            }catch(IOException){}catch(UnauthorizedAccessException){}
+            }catch(IOException){return;}catch(UnauthorizedAccessException){return;}
             MergeInto(LocalData.DirectoryPath,sources,DateTimeOffset.Now);
+        }
+        static bool IsCompleted(string folder)
+        {
+            string path=Path.Combine(folder,"storage-migration.json");
+            var state=LocalData.Read<StorageMigrationState>(path)??LocalData.Read<StorageMigrationState>(path+".bak");
+            return state!=null&&state.Completed;
         }
         internal static bool MergeInto(string destination,IEnumerable<string> sources,DateTimeOffset now)
         {
@@ -39,6 +47,7 @@ namespace CodexUsageTaskbar
                 if(state==null&&File.Exists(statePath))state=LocalData.Read<StorageMigrationState>(statePath+".bak");
                 if(state==null&&File.Exists(statePath))return false;
                 state=state??new StorageMigrationState();
+                if(state.Completed)return true;
                 if(state.Sources==null)state.Sources=new Dictionary<string,string>();
                 var history=LocalData.Read<List<HistorySample>>(historyPath);
                 if(history==null&&File.Exists(historyPath))history=LocalData.Read<List<HistorySample>>(historyPath+".bak");
@@ -49,7 +58,7 @@ namespace CodexUsageTaskbar
                     string sourcePath=Path.Combine(folder,"history.json");
                     var incoming=LocalData.Read<List<HistorySample>>(sourcePath);
                     if(incoming==null&&File.Exists(sourcePath))incoming=LocalData.Read<List<HistorySample>>(sourcePath+".bak");
-                    if(incoming==null)continue;
+                    if(incoming==null){if(File.Exists(sourcePath))return false;continue;}
                     string identity=PhysicalPath(sourcePath).ToLowerInvariant(),fingerprint=Fingerprint(incoming);
                     string previous;if(state.Sources.TryGetValue(identity,out previous)&&previous==fingerprint)continue;
                     long latest=now.AddMinutes(1).ToUnixTimeSeconds();
@@ -76,7 +85,8 @@ namespace CodexUsageTaskbar
                     foreach(var alert in alerts){long at;if(!saved.TryGetValue(alert.Key,out at)||alert.Value>at)saved[alert.Key]=alert.Value;}
                     if(!LocalData.Write(alertsPath,saved))return false;
                 }
-                return true;
+                state.Completed=true;
+                return LocalData.Write(statePath,state,true);
             }catch(IOException){}catch(UnauthorizedAccessException){}
             return false;
         }
