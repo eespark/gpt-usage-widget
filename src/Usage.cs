@@ -118,6 +118,8 @@ namespace CodexUsageTaskbar
         readonly object gate = new object();
         Process process;
         bool disposed;
+        public string Stage { get; private set; }
+        public string ExecutablePath { get; private set; }
         public static string FindCodex()
         {
             string custom = Environment.GetEnvironmentVariable("CODEX_USAGE_CLI");
@@ -136,7 +138,8 @@ namespace CodexUsageTaskbar
         }
         public async Task<UsageSnapshot> FetchAsync()
         {
-            var start = new ProcessStartInfo(FindCodex(), "app-server --listen stdio://") {
+            Stage="start";ExecutablePath=FindCodex();
+            var start = new ProcessStartInfo(ExecutablePath, "app-server --listen stdio://") {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
                 RedirectStandardOutput = true, RedirectStandardError = true,
                 WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory
@@ -154,19 +157,19 @@ namespace CodexUsageTaskbar
                 using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25)))
                 using (timeout.Token.Register(delegate { TryKill(current); }))
                 {
-                    string stage = "initialize/send";
+                    string stage = "initialize/send";Stage=stage;
                     try
                     {
                         await Send(current, new { id = 1, method = "initialize", @params = new { clientInfo = new {
-                            name = "gpt_usage_widget", title = "GPT Usage Widget", version = "1.0.2" } } });
-                        stage = "initialize/read";
-                        await Receive(current, 1);
-                        stage = "initialized/send";
-                        await Send(current, new { method = "initialized", @params = new { } });
-                        await Send(current, new { id = 2, method = "account/rateLimits/read", @params = new { } });
-                        stage = "rateLimits/read";
-                        string result = await Receive(current, 2);
-                        stage = "rateLimits/parse";
+                            name = "gpt_usage_widget", title = "GPT Usage Widget", version = "1.0.3" } } },timeout.Token).ConfigureAwait(false);
+                        stage = "initialize/read";Stage=stage;
+                        await Receive(current, 1,timeout.Token).ConfigureAwait(false);
+                        stage = "initialized/send";Stage=stage;
+                        await Send(current, new { method = "initialized", @params = new { } },timeout.Token).ConfigureAwait(false);
+                        await Send(current, new { id = 2, method = "account/rateLimits/read", @params = new { } },timeout.Token).ConfigureAwait(false);
+                        stage = "rateLimits/read";Stage=stage;
+                        string result = await Receive(current, 2,timeout.Token).ConfigureAwait(false);
+                        stage = "rateLimits/parse";Stage=stage;
                         return UsageParser.Parse(result);
                     }
                     catch (Exception ex)
@@ -183,16 +186,28 @@ namespace CodexUsageTaskbar
                 }
             }
         }
-        static async Task Send(Process current, object message)
+        internal static async Task AwaitOperation(Task operation,CancellationToken cancellation)
         {
-            await current.StandardInput.WriteLineAsync(new JavaScriptSerializer().Serialize(message));
-            await current.StandardInput.FlushAsync();
+            var cancelled=new TaskCompletionSource<bool>();
+            using(cancellation.Register(delegate {cancelled.TrySetResult(true);})) {
+                await Task.WhenAny(operation,cancelled.Task).ConfigureAwait(false);
+                cancellation.ThrowIfCancellationRequested();
+                await operation.ConfigureAwait(false);
+            }
         }
-        static async Task<string> Receive(Process current, int id)
+        static async Task Send(Process current, object message,CancellationToken cancellation)
+        {
+            await AwaitOperation(current.StandardInput.WriteLineAsync(new JavaScriptSerializer().Serialize(message)),cancellation).ConfigureAwait(false);
+            await AwaitOperation(current.StandardInput.FlushAsync(),cancellation).ConfigureAwait(false);
+        }
+        static async Task<string> Receive(Process current, int id,CancellationToken cancellation)
         {
             string line;
-            while ((line = await current.StandardOutput.ReadLineAsync()) != null)
+            while (true)
             {
+                var reading=current.StandardOutput.ReadLineAsync();
+                await AwaitOperation(reading,cancellation).ConfigureAwait(false);
+                line=await reading.ConfigureAwait(false);if(line==null)break;
                 Dictionary<string, object> obj;
                 try { obj = UsageParser.Object(new JavaScriptSerializer().DeserializeObject(line)); } catch (ArgumentException) { continue; }
                 if (Convert.ToString(UsageParser.Get(obj, "id")) != id.ToString()) continue;

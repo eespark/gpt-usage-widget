@@ -29,19 +29,21 @@ namespace CodexUsageTaskbar
             var points = samples.Where(x => x.At >= cutoff && x.At <= latest).OrderBy(x => x.At)
                 .GroupBy(x => x.At).Select(x => x.Last()).ToArray();
             var buckets = new Dictionary<long, UsageBin>();
+            long cycle=0;
             for (int i = 1; i < points.Length; i++) {
                 var a = points[i - 1]; var b = points[i];
                 double? av = weekly ? a.Week : a.Five, bv = weekly ? b.Week : b.Five;
                 long? ar = weekly ? a.WeekReset : a.FiveReset, br = weekly ? b.WeekReset : b.FiveReset;
                 long elapsed = b.At - a.At;
-                if (elapsed > 600 || !av.HasValue || !bv.HasValue || !ar.HasValue || !br.HasValue) continue;
-                bool valid = ar == br && bv <= av && av > Positive && a.At < ar.Value && b.At <= ar.Value;
+                if(HistoryIntervals.StartsNewCycle(a,b,weekly))cycle++;
+                if (elapsed<=0 || elapsed > 600 || !av.HasValue || !bv.HasValue || !ar.HasValue || !br.HasValue) continue;
+                bool valid = HistoryIntervals.Observed(a,b,weekly) && av > Positive && a.At < Math.Max(ar.Value,br.Value) && b.At <= Math.Max(ar.Value,br.Value);
                 for (long cursor = a.At; cursor < b.At;) {
                     long at = cursor / BinSeconds * BinSeconds;
                     long end = Math.Min(b.At, at + BinSeconds);
                     UsageBin bucket;
-                    if (!buckets.TryGetValue(at, out bucket)) buckets[at] = bucket = new UsageBin { At = at, Cycle = ar.Value };
-                    if (!valid || bucket.Cycle != ar.Value) bucket.Invalid = true;
+                    if (!buckets.TryGetValue(at, out bucket)) buckets[at] = bucket = new UsageBin { At = at, Cycle = cycle };
+                    if (!valid || bucket.Cycle != cycle) bucket.Invalid = true;
                     else {
                         bucket.Covered += end - cursor;
                         bucket.Amount += (av.Value - bv.Value) * (end - cursor) / elapsed;

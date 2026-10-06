@@ -19,6 +19,14 @@ namespace CodexUsageTaskbar
         }
         static void MonitoringChecks()
         {
+            using(var cancel=new System.Threading.CancellationTokenSource()) {
+                var stalled=new System.Threading.Tasks.TaskCompletionSource<bool>();
+                var waiting=UsageClient.AwaitOperation(stalled.Task,cancel.Token);cancel.Cancel();
+                bool ended=false;try {waiting.GetAwaiter().GetResult();}catch(OperationCanceledException){ended=true;}
+                Check(ended&&!stalled.Task.IsCompleted,"Cancelled CLI IO releases the fetch even when a pipe never closes");
+                UsageClient.AwaitOperation(System.Threading.Tasks.Task.FromResult(true),System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                Check(true,"Completed CLI IO does not wait for a timeout");
+            }
             string root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-data-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root);
             try {
@@ -245,6 +253,23 @@ namespace CodexUsageTaskbar
                 Check(bitmap.GetPixel(0,0).R>200,"History chart renders the selected longer period offscreen");
             }
             var gapChart=new UsageHistory(Path.Combine(root,"chart-gaps.json"));
+            var drift=new UsageHistory(Path.Combine(root,"reset-drift.json"));
+            long driftStart=now.AddHours(-3).ToUnixTimeSeconds()/900*900;
+            for(int i=0;i<=12;i++)drift.Samples.Add(new HistorySample {At=driftStart+i*300,Five=100-i,Week=90-i,FiveReset=driftStart+86400+i*2,WeekReset=driftStart+604800+i*2});
+            Check(Math.Abs(drift.Consumption(DateTimeOffset.FromUnixTimeSeconds(driftStart),DateTimeOffset.FromUnixTimeSeconds(driftStart+3600),false)-12)<.000001,"Reset-time drift does not discard observed consumption bars");
+            Check(IntermittentForecast.Bins(drift.Samples,false,driftStart+3600,7).Count==4,"Reset-time drift does not invalidate completed forecast buckets");
+            Check(Math.Abs(drift.Consumption(DateTimeOffset.FromUnixTimeSeconds(driftStart+150),DateTimeOffset.FromUnixTimeSeconds(driftStart+450),false)-1)<.000001,"Consumption is apportioned across chart bucket boundaries");
+            string safePath=Path.Combine(root,"safe-history.json");
+            var writer=new UsageHistory(safePath);var other=new UsageHistory(safePath);
+            var safeSnapshot=new UsageSnapshot {FetchedAt=now.AddMinutes(-5),FiveHour=new QuotaWindow {Remaining=80,ResetsAt=now.AddHours(2).ToUnixTimeSeconds()}};
+            writer.Record(safeSnapshot);safeSnapshot.FetchedAt=now.AddMinutes(-4);other.Record(safeSnapshot);
+            Check(new UsageHistory(safePath).Samples.Count==2,"A stale in-memory writer merges existing disk records before saving");
+            File.WriteAllText(safePath,"invalid JSON");
+            Check(new UsageHistory(safePath).Samples.Count==1,"Unreadable main history recovers the previous valid backup");
+            var protectedPath=Path.Combine(root,"unreadable-history.json");File.WriteAllText(protectedPath,"invalid JSON");
+            var protectedHistory=new UsageHistory(protectedPath);protectedHistory.Record(safeSnapshot);
+            Check(File.ReadAllText(protectedPath)=="invalid JSON"&&protectedHistory.StorageFailed,"Unreadable history is never replaced by a new partial history");
+            other.Clear();Check(!File.Exists(safePath+".bak")&&new UsageHistory(safePath).Samples.Count==0,"Explicit deletion clears history and its recovery backup");
             string reloadPath=Path.Combine(root,"reload-history.json");
             var reloadHistory=new UsageHistory(reloadPath);
             LocalData.Write(reloadPath,new[]{new HistorySample {At=now.AddHours(-3).ToUnixTimeSeconds(),Five=80,Week=60}});
@@ -281,6 +306,7 @@ namespace CodexUsageTaskbar
                 HistoryCanvas.DrawSeries(graphics,new RectangleF(10,10,100,80),gapChart,DateTimeOffset.FromUnixTimeSeconds(gapStart),DateTimeOffset.FromUnixTimeSeconds(gapStart+3600),false,Color.Blue,1);
                 Check(bitmap.GetPixel(50,26).ToArgb()==Color.White.ToArgb(),"Reset cycles are never bridged by the history chart");
                 Check(bitmap.GetPixel(108,18).ToArgb()==Color.White.ToArgb(),"Reset observations below 100% do not receive a start marker");
+                Check(bitmap.GetPixel(110,18).B>bitmap.GetPixel(110,18).R,"A lone observation after reset remains visible without a reset ring");
                 Check(bitmap.GetPixel(8,26).B>bitmap.GetPixel(8,26).R,"Last observation before reset receives a small endpoint ring");
                 gapChart.Samples[1].Five=100;
                 graphics.Clear(Color.White);

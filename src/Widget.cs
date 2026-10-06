@@ -22,6 +22,7 @@ namespace CodexUsageTaskbar
         readonly AlertEngine alerts;
         readonly Queue<UsageAlert> pendingAlerts = new Queue<UsageAlert>();
         DateTimeOffset lastAlert = DateTimeOffset.MinValue;
+        DateTimeOffset lastStatusWrite = DateTimeOffset.MinValue;
         bool suspended, sessionLocked, forceRefresh;
         string lastPaintKey;
         readonly Timer placementTimer = new Timer { Interval = 500 };
@@ -73,6 +74,7 @@ namespace CodexUsageTaskbar
             tray = new NotifyIcon { Icon = appIcon, Text = "GPT Usage Widget", ContextMenuStrip = menu, Visible = true };
             tray.MouseUp += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) RefreshUsage(); };
             placementTimer.Tick += delegate {
+                if(DateTimeOffset.Now-lastStatusWrite>=TimeSpan.FromMinutes(1))SaveMonitorStatus();
                 Place(); UpdateTooltip();
                 var expiry = ExpiryDisplay.For(snapshot, DateTimeOffset.Now);
                 string paintKey = FormatRemainingTime(snapshot == null ? null : snapshot.FiveHour, DateTimeOffset.Now) + FormatRemainingTime(snapshot == null ? null : snapshot.Weekly, DateTimeOffset.Now) + Bounds.ToString() + IsStale + (expiry == null ? "" : expiry.Text);
@@ -85,7 +87,8 @@ namespace CodexUsageTaskbar
             SystemEvents.SessionSwitch += SessionChanged;
             NetworkChange.NetworkAvailabilityChanged += NetworkChanged;
             animationTimer.Tick += delegate { if (busy) Invalidate(); };
-            Shown += delegate {
+            Load += delegate {
+                SaveMonitorStatus();
                 Place(); placementTimer.Start();
                 if (demo) {
                     snapshot = new UsageSnapshot { FetchedAt = DateTimeOffset.Now, ResetCredits = 2,
@@ -152,10 +155,11 @@ namespace CodexUsageTaskbar
         async void RefreshUsage()
         {
             if (busy || closing || demo || suspended) return;
-            if (!Online) { status = Ui.Text("인터넷 연결을 기다리는 중입니다."); UpdateTooltip(); Invalidate(); return; }
+            if (!Online) { status = Ui.Text("인터넷 연결을 기다리는 중입니다.");SaveMonitorStatus(); UpdateTooltip(); Invalidate(); return; }
             busy = true;
             refreshClock.Restart(); animationTimer.Start();
             status = Ui.Text("사용량을 불러오는 중…"); UpdateTooltip(); Invalidate();
+            SaveMonitorStatus();
             bool success = false;
             try
             {
@@ -176,7 +180,19 @@ namespace CodexUsageTaskbar
                 schedule.Completed(DateTimeOffset.Now, success, settings.EfficientPolling, SystemInformation.PowerStatus.PowerLineStatus == PowerLineStatus.Offline);
                 animationTimer.Stop(); refreshClock.Stop();
                 if (!closing) { UpdateTooltip(); Invalidate(); }
+                SaveMonitorStatus();
             }
+        }
+        void SaveMonitorStatus()
+        {
+            lastStatusWrite=DateTimeOffset.Now;
+            LocalData.Write(Path.Combine(LocalData.DirectoryPath,"monitor-status.json"),new {
+                CheckedAt=lastStatusWrite.ToUnixTimeSeconds(),
+                LastSuccessAt=snapshot==null?(long?)null:snapshot.FetchedAt.ToUnixTimeSeconds(),
+                HistoryCount=history.Samples.Count,LastRecordAt=history.Samples.Count==0?(long?)null:history.Samples[history.Samples.Count-1].At,
+                StorageFailed=history.StorageFailed,ActiveRequest=busy,Phase=client.Stage,CLI=client.ExecutablePath,
+                Suspended=suspended,Locked=sessionLocked,Error=status
+            });
         }
         bool Online
         {

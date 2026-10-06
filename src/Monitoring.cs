@@ -15,13 +15,13 @@ namespace CodexUsageTaskbar
             catch (IOException) { } catch (UnauthorizedAccessException) { } catch (ArgumentException) { } catch (InvalidOperationException) { }
             return null;
         }
-        public static bool Write(string path, object value)
+        public static bool Write(string path, object value, bool keepBackup=false)
         {
             try {
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 string temporary = path + ".tmp";
                 File.WriteAllText(temporary, new JavaScriptSerializer { MaxJsonLength = 64000000 }.Serialize(value));
-                if (File.Exists(path)) File.Replace(temporary, path, null, true); else File.Move(temporary, path);
+                if (File.Exists(path)) File.Replace(temporary, path, keepBackup?path+".bak":null, true); else File.Move(temporary, path);
                 return true;
             } catch (IOException) { } catch (UnauthorizedAccessException) { }
             return false;
@@ -122,10 +122,27 @@ namespace CodexUsageTaskbar
         public double? ActiveHoursPerDay;
         public int ObservedDays;
     }
+    internal static class HistoryIntervals
+    {
+        internal static bool StartsNewCycle(HistorySample a,HistorySample b,bool weekly)
+        {
+            double? av=weekly?a.Week:a.Five,bv=weekly?b.Week:b.Five;
+            if(av.HasValue&&bv.HasValue&&bv.Value>av.Value+.000001)return true;
+            long? ar=weekly?a.WeekReset:a.FiveReset,br=weekly?b.WeekReset:b.FiveReset;
+            return ar.HasValue&&br.HasValue&&Math.Abs(br.Value-ar.Value)>600;
+        }
+        internal static bool Observed(HistorySample a,HistorySample b,bool weekly)
+        {
+            double? av=weekly?a.Week:a.Five,bv=weekly?b.Week:b.Five;
+            return b.At>a.At&&b.At-a.At<=600&&av.HasValue&&bv.HasValue&&!StartsNewCycle(a,b,weekly);
+        }
+    }
     public sealed class UsageHistory
     {
         readonly string path;
         readonly Settings preferences;
+        bool readFailed;
+        string lastViewKey;
         readonly UsageForecast[] forecastCache = new UsageForecast[2];
         readonly long[] forecastKeys = new long[2];
         public List<HistorySample> Samples { get; private set; }
@@ -133,12 +150,20 @@ namespace CodexUsageTaskbar
         public UsageHistory(string historyPath, Settings options = null)
         {
             path = historyPath; preferences=options ?? new Settings(); preferences.Normalize();
-            var loaded = LocalData.Read<List<HistorySample>>(path) ?? new List<HistorySample>();
+            var loaded = ReadStored() ?? new List<HistorySample>();
             Samples = loaded
                 .Where(x => x != null && x.At >= DateTimeOffset.Now.AddDays(-preferences.HistoryDays).ToUnixTimeSeconds() && x.At <= DateTimeOffset.Now.AddMinutes(1).ToUnixTimeSeconds() &&
                     Valid(x.Five) && Valid(x.Week)).OrderBy(x => x.At).GroupBy(x=>x.At).Select(x=>x.Last()).ToList();
             Compact(DateTimeOffset.Now);
-            if (loaded.Count != Samples.Count) StorageFailed = !LocalData.Write(path, Samples);
+            if (!readFailed&&loaded.Count != Samples.Count) StorageFailed = !LocalData.Write(path, Samples,true);
+        }
+        List<HistorySample> ReadStored()
+        {
+            var stored=LocalData.Read<List<HistorySample>>(path);
+            if(stored==null&&File.Exists(path))stored=LocalData.Read<List<HistorySample>>(path+".bak");
+            readFailed=stored==null&&File.Exists(path);
+            if(readFailed)StorageFailed=true;
+            return stored;
         }
         void Compact(DateTimeOffset now)
         {
@@ -146,10 +171,10 @@ namespace CodexUsageTaskbar
             // Older samples retain five-minute resolution; preserve reset boundaries.
             Samples=Samples.Where(x=>x.At>=cutoff).GroupBy(x=>new {Bucket=x.At<detailed?x.At/300:x.At,Old=x.At<detailed,x.FiveReset,x.WeekReset}).Select(x=>x.Last()).OrderBy(x=>x.At).ToList();
         }
-        public void ApplyRetention() { Compact(DateTimeOffset.Now); StorageFailed=!LocalData.Write(path,Samples); }
+        public void ApplyRetention() { ReloadStoredSamples();Compact(DateTimeOffset.Now);StorageFailed=readFailed||!LocalData.Write(path,Samples,true); }
         public void ReloadStoredSamples()
         {
-            var stored=LocalData.Read<List<HistorySample>>(path);
+            var stored=ReadStored();
             if(stored==null)return;
             long cutoff=DateTimeOffset.Now.AddDays(-preferences.HistoryDays).ToUnixTimeSeconds();
             long latest=DateTimeOffset.Now.AddMinutes(1).ToUnixTimeSeconds();
@@ -158,21 +183,34 @@ namespace CodexUsageTaskbar
             Compact(DateTimeOffset.Now);
             forecastCache[0]=forecastCache[1]=null;
         }
+        public void WriteViewReport(int days,DateTimeOffset end,int width,int height,float scale)
+        {
+            string key=days+":"+Samples.Count+":"+end.ToUnixTimeSeconds()/60+":"+width+":"+height;
+            if(lastViewKey==key)return;lastViewKey=key;
+            long start=end.AddDays(-days).ToUnixTimeSeconds(),finish=end.ToUnixTimeSeconds();
+            LocalData.Write(Path.Combine(Path.GetDirectoryName(path),"history-view.json"),new {
+                HistoryPath=path,Days=days,End=finish,Width=width,Height=height,Scale=scale,
+                MemoryCount=Samples.Count,Visible=Samples.Where(x=>x.At>=start&&x.At<=finish).ToArray()
+            });
+        }
         static bool Valid(double? percent) { return !percent.HasValue || (!double.IsNaN(percent.Value) && !double.IsInfinity(percent.Value) && percent >= 0 && percent <= 100); }
         public void Record(UsageSnapshot data)
         {
             if (data == null) return;
+            ReloadStoredSamples();
             long timestamp = data.FetchedAt.ToUnixTimeSeconds();
             if (Samples.Count > 0 && timestamp <= Samples[Samples.Count - 1].At) return;
             Samples.Add(new HistorySample { At = timestamp, Five = data.FiveHour == null ? (double?)null : data.FiveHour.Remaining,
                 Week = data.Weekly == null ? (double?)null : data.Weekly.Remaining,
                 FiveReset = data.FiveHour == null ? null : data.FiveHour.ResetsAt, WeekReset = data.Weekly == null ? null : data.Weekly.ResetsAt });
             Compact(data.FetchedAt);
-            StorageFailed = !LocalData.Write(path, Samples);
+            StorageFailed = readFailed||!LocalData.Write(path, Samples,true);
         }
         public void Clear()
         {
-            Samples.Clear(); StorageFailed = !LocalData.Write(path, Samples);
+            Samples.Clear();readFailed=false;StorageFailed = !LocalData.Write(path, Samples);
+            // 명시적 삭제 이후 백업에서 기록이 되살아나지 않도록 합니다.
+            try {if(File.Exists(path+".bak"))File.Delete(path+".bak");}catch(IOException){}catch(UnauthorizedAccessException){}
         }
         public double? Rate(bool weekly, UsageSnapshot current)
         {
@@ -206,7 +244,7 @@ namespace CodexUsageTaskbar
                 var a=Samples[i-1];var b=Samples[i];double? av=weekly?a.Week:a.Five,bv=weekly?b.Week:b.Five;
                 long? ar=weekly?a.WeekReset:a.FiveReset,br=weekly?b.WeekReset:b.FiveReset;
                 long elapsed=b.At-a.At;
-                if(a.At<cutoff||b.At>latest||elapsed<=0||elapsed>600||!av.HasValue||!bv.HasValue||!ar.HasValue||ar!=br||bv>av)continue;
+                if(a.At<cutoff||b.At>latest||!HistoryIntervals.Observed(a,b,weekly))continue;
                 double weight=Math.Pow(.5,(latest-(a.At+b.At)/2.0)/(Math.Max(1,preferences.ForecastDays/3.0)*86400));
                 drop+=(av.Value-bv.Value)*weight;weightedHours+=elapsed/3600.0*weight;observedSeconds+=elapsed;intervals++;
             }
@@ -305,8 +343,7 @@ namespace CodexUsageTaskbar
             for (int i = 1; i < Samples.Count; i++) {
                 var a = Samples[i - 1]; var b = Samples[i];
                 long elapsed = b.At - a.At;
-                if (b.At > latest || elapsed <= 0 || elapsed > 600 || !a.Week.HasValue || !b.Week.HasValue ||
-                    !a.WeekReset.HasValue || a.WeekReset != b.WeekReset || b.Week > a.Week) continue;
+                if (b.At > latest || !HistoryIntervals.Observed(a,b,true)) continue;
                 long cursor = a.At;
                 while (cursor < b.At) {
                     long day = (cursor + 32400) / 86400;
@@ -355,9 +392,9 @@ namespace CodexUsageTaskbar
                 var a = Samples[i-1]; var b = Samples[i];
                 double? previous = weekly ? a.Week : a.Five; double? value = weekly ? b.Week : b.Five;
                 long? previousReset = weekly ? a.WeekReset : a.FiveReset; long? reset = weekly ? b.WeekReset : b.FiveReset;
-                if (b.At < start.ToUnixTimeSeconds() || b.At >= end.ToUnixTimeSeconds() || b.At - a.At > 10 * 60 ||
-                    !previous.HasValue || !value.HasValue || !reset.HasValue || reset != previousReset) continue;
-                total += Math.Max(0, previous.Value - value.Value);
+                if (!HistoryIntervals.Observed(a,b,weekly)) continue;
+                long overlap=Math.Min(b.At,end.ToUnixTimeSeconds())-Math.Max(a.At,start.ToUnixTimeSeconds());
+                if(overlap>0)total+=Math.Max(0,previous.Value-value.Value)*overlap/(b.At-a.At);
             }
             return total;
         }

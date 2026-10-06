@@ -129,6 +129,7 @@ namespace CodexUsageTaskbar
                 if(settings.HistoryEnabled)using(var dailyInk=new SolidBrush(Widget.Accent))Line(g,history.WeeklyDailyText(data,true),body,dailyInk,24*s,176*s,Width-48*s,20*s);
                 var chart=new RectangleF(54*s,228*s,Math.Max(100,Width-82*s),110*s);
                 DateTimeOffset end=DateTimeOffset.Now; DateTimeOffset start=end.AddDays(-RangeDays);
+                history.WriteViewReport(RangeDays,end,Width,Height,s);
                 g.DrawString(Ui.Text("남은 사용량 (%)"),bold,ink,24*s,203*s);
                 using(var grid=new Pen(p.Divider,s)) for(int i=0;i<=2;i++) {
                     float y=chart.Top+chart.Height*i/2; g.DrawLine(grid,chart.Left,y,chart.Right,y);
@@ -138,6 +139,10 @@ namespace CodexUsageTaskbar
                 DrawSeries(g,chart,history,start,end,false,fiveColor,s);
                 Color weeklyColor=Color.FromArgb(139,92,246);
                 DrawSeries(g,chart,history,start,end,true,weeklyColor,s);
+                if(!history.Samples.Any(x=>x.At>=start.ToUnixTimeSeconds()&&x.At<=end.ToUnixTimeSeconds())) {
+                    Line(g,Ui.Text("선택 기간에 수집된 기록이 없습니다."),body,muted,chart.Left+12*s,chart.Top+36*s,chart.Width-24*s,20*s);
+                    if(history.Samples.Count>0)Line(g,Ui.Text("마지막 기록: ")+ExpiryDisplay.InKorea(DateTimeOffset.FromUnixTimeSeconds(history.Samples[history.Samples.Count-1].At)).ToString("yy. MM. dd. HH:mm")+Ui.Text(" · 표시 기간을 늘려 확인하세요."),body,muted,chart.Left+12*s,chart.Top+58*s,chart.Width-24*s,20*s);
+                }
                 for(int i=0;i<=4;i++) {
                     var at=ExpiryDisplay.InKorea(start.AddDays(RangeDays*i/4.0)); float x=chart.Left+chart.Width*i/4;
                     g.DrawString(at.ToString(RangeDays==1?"HH:mm":"MM/dd"),body,muted,x-15*s,chart.Bottom+6*s);
@@ -182,22 +187,36 @@ namespace CodexUsageTaskbar
             double seconds=(end-start).TotalSeconds;
             if(seconds<=0)return;
             var resets=new System.Collections.Generic.List<PointF>();
+            var connected=new bool[samples.Length];
             Func<HistorySample,PointF> pointOf=x=>new PointF(rect.Left+(float)((x.At-start.ToUnixTimeSeconds())/seconds*rect.Width),rect.Bottom-(float)((weekly?x.Week.Value:x.Five.Value)/100*rect.Height));
             if(samples.Length>0&&Math.Abs((weekly?samples[0].Week.Value:samples[0].Five.Value)-100)<.000001)resets.Add(pointOf(samples[0]));
-            using(var pen=new Pen(color,1.8f*scale))for(int i=1;i<samples.Length;i++) {
+            var run=new System.Collections.Generic.List<PointF>();
+            if(samples.Length>0)run.Add(pointOf(samples[0]));
+            using(var pen=new Pen(color,1.8f*scale)) {
+            pen.LineJoin=LineJoin.Round;pen.StartCap=pen.EndCap=LineCap.Round;
+            for(int i=1;i<samples.Length;i++) {
                 var a=samples[i-1];var b=samples[i];double? av=weekly?a.Week:a.Five,bv=weekly?b.Week:b.Five;
                 long? ar=weekly?a.WeekReset:a.FiveReset,br=weekly?b.WeekReset:b.FiveReset;
                 if(!av.HasValue||!bv.HasValue||b.At<=a.At)continue;
                 var left=new PointF(rect.Left+(float)((a.At-start.ToUnixTimeSeconds())/seconds*rect.Width),rect.Bottom-(float)(av.Value/100*rect.Height));
                 var right=new PointF(rect.Left+(float)((b.At-start.ToUnixTimeSeconds())/seconds*rect.Width),rect.Bottom-(float)(bv.Value/100*rect.Height));
                 // 예정 시각의 작은 갱신은 주기 변경이 아닙니다. 실제 증가나 초기화 경계만 구분합니다.
-                if(bv.Value>av.Value+.000001||(ar.HasValue&&br.HasValue&&ar!=br&&ar.Value>a.At&&ar.Value<=b.At)) {
+                if(HistoryIntervals.StartsNewCycle(a,b,weekly)) {
+                    if(run.Count>1)g.DrawLines(pen,run.ToArray());
+                    run.Clear();run.Add(right);
                     resets.Add(left);
                     if(Math.Abs(bv.Value-100)<.000001)resets.Add(right);
                     continue;
                 }
                 // 조회 공백은 실선으로만 연결하며 소비량·예측 계산에는 포함하지 않습니다.
-                g.DrawLine(pen,left,right);
+                run.Add(right);
+                connected[i-1]=connected[i]=true;
+            }
+            if(run.Count>1)g.DrawLines(pen,run.ToArray());
+            }
+            // 한 주기에 관측값이 하나뿐인 경우도 숨기지 않습니다. 초기화 링과 구분되는 작은 점입니다.
+            using(var observation=new SolidBrush(color))for(int i=0;i<samples.Length;i++)if(!connected[i]) {
+                var point=pointOf(samples[i]);if(!resets.Contains(point))g.FillEllipse(observation,point.X-.9f*scale,point.Y-.9f*scale,1.8f*scale,1.8f*scale);
             }
             if(samples.Length>0&&Math.Abs(weekly?samples[samples.Length-1].Week.Value:samples[samples.Length-1].Five.Value)<.000001)resets.Add(pointOf(samples[samples.Length-1]));
             using(var outline=new Pen(color,1.2f*scale))using(var fill=new SolidBrush(Color.White))

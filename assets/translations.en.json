@@ -243,5 +243,8 @@
   "표시": "Appearance",
   "알림": "Notifications",
   "기록과 조회": "History and refresh",
-  "○ 100% 시작·소진·초기화 직전 · 조회 공백은 계산 제외 · 한국 시간": "○ 100% start, exhaustion, pre-reset · Gaps excluded from calculations · KST"
+  "○ 100% 시작·소진·초기화 직전 · 조회 공백은 계산 제외 · 한국 시간": "○ 100% start, exhaustion, pre-reset · Gaps excluded from calculations · KST",
+  "선택 기간에 수집된 기록이 없습니다.": "No records collected within this period.",
+  "마지막 기록: ": "Last record: ",
+  " · 표시 기간을 늘려 확인하세요.": " · Select a longer period to view older records."
 }

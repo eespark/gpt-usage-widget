@@ -2,11 +2,9 @@
 
 한국어 안내는 [한국어 README](README.ko.md)를 확인하세요.
 
-배포 ZIP에서 이 문서를 읽는 경우, 화면 이미지와 연결된 문서는 [온라인 README](https://github.com/eespark/gpt-usage-widget#readme)에서 확인하세요.
+배포 ZIP에서 문서를 읽는 경우 화면 이미지와 연결된 안내는 [온라인 README](https://github.com/eespark/gpt-usage-widget#readme)에서 확인하세요.
 
-A local Windows taskbar widget that displays your remaining Codex 5-hour and weekly quota beside the clock. Supports light and dark themes, usage history, configurable reminders, and local exhaustion estimates.
-
-![Application icon](assets/app-preview.png)
+A local Windows taskbar widget for your remaining Codex 5-hour and weekly quota. Includes light and dark themes, reminders, usage history, and exhaustion estimates.
 
 ## UI previews
 
@@ -24,94 +22,77 @@ Settings:
 
 ## Download and run
 
-1. Install the Codex desktop app or CLI and sign in with your ChatGPT account.
-2. Download a Windows x64 ZIP from [Releases](https://github.com/eespark/gpt-usage-widget/releases) and extract it.
-3. Run `GPTUsageWidget.en.exe` for English or `GPTUsageWidget.exe` for Korean.
+1. Install the Codex app or CLI on Windows x64 and sign in with your ChatGPT account.
+2. Download and extract your language edition from [the latest release](https://github.com/eespark/gpt-usage-widget/releases/latest).
+3. Run `GPTUsageWidget.en.exe` for English or `GPTUsageWidget.exe` for Korean. Run one edition at a time.
 
-The English archive is `GPTUsageWidget-v1.0.2-win-x64-en.zip`; the Korean archive is `GPTUsageWidget-v1.0.2-win-x64.zip`. If no release has been published, build from source using the instructions below.
+Requires .NET Framework 4.8. No separate .NET SDK or administrator access is needed. The widget uses the installed Codex CLI and its sign-in. Signing in to ChatGPT in a browser alone is insufficient.
 
-## Requirements and sign-in
+This is an unofficial project. It displays Codex quota, rather than every ChatGPT model's separate chat limit.
 
-- Windows x64 with .NET Framework 4.8. A separate .NET SDK is not required.
-- Codex CLI must be available and signed in with your ChatGPT account. The widget can discover the CLI bundled with the Codex desktop app and reuse its existing sign-in.
-- Browser-only ChatGPT sign-in does not sign you into Codex CLI. If discovery fails, set `CODEX_USAGE_CLI` to the full path to `codex.exe`.
-- The widget has no separate login screen and does not install Codex CLI automatically. API-key accounts may not provide subscription quota information.
+## Use
 
-This unofficial widget shows Codex quota, not every ChatGPT model's separate chat limit. Authentication and credential refresh are handled by Codex CLI.
+- Bars and percentages show remaining quota: 5-hour above, weekly below.
+- Hover for details, click the estimate card for history, and click outside to dismiss.
+- Click and release to refresh; drag to move the widget.
+- Right-click for settings, Windows startup, and Exit. Use **Show widget again** in the tray menu if it disappears.
+- Settings include dark mode, text and bar size, visible sections, and reminder thresholds.
+- Reset credits and expiration dates appear when available, with emphasis from D-7.
 
-## Features
+Times and reminders use Korea Standard Time (UTC+9). The widget displays on the primary taskbar and hides for fullscreen apps or a hidden taskbar. Move it if it overlaps taskbar buttons.
 
-- Remaining percentages, blue progress bars, and reset countdowns for both quota windows.
-- Reset credits and expiration dates when available, highlighted from D-7.
-- Hover details and integrated usage history. Click the estimate card to open history; click outside to dismiss the panel.
-- Click and release to refresh. Right-click for settings, positioning, startup, and exit. Choose **Show widget again** if the widget disappears.
-- Configurable low-quota thresholds and reminders before each reset.
-- Card-based settings with history deletion, Cancel, and Save in a fixed footer.
-- Persistent local history with 30/90/180/365-day retention (default 90). Forecast lookback is separately selectable as 1/3/7/14 days (default 7).
-- Light and dark themes, optional Windows startup, and polling adjusted for inactivity, connection failures, lock, and sleep.
+## Reminders and refresh
 
-Both editions use Korea Standard Time (UTC+9) for reset times, calendar-based reminders, and daily totals. Run one edition at a time because they share the same settings and history.
+Choose separate low-quota thresholds and reset reminders in Settings. Defaults are 20% remaining, 60 minutes before the 5-hour reset, and 12:30 PM on the day before the weekly reset. Identical reminders do not repeat within the same cycle.
 
-## Forecasts
+Refreshes normally every 60 seconds, or 120 seconds on battery. Automatic polling pauses while offline, locked, or asleep and resumes afterward. Repeated failures increase the retry interval up to 15 minutes. Click to refresh immediately. The widget cannot collect records or notify while it or the PC is off.
 
-**Continuous work:** remaining quota divided by consumption intensity estimated from positive-consumption 15-minute buckets. This assumes uninterrupted work at that intensity and does not use average daily work hours. Intensity updates when consumption is observed; short idle periods do not inflate available time.
+Refreshing quota does not submit a model inference request or spend reset credits.
 
-**Weekly days:** remaining weekly quota divided by weighted average consumption on completed observed dates. This is independent of the continuous-work estimate. Average daily work hours are a separate summary estimated from coverage of positive-consumption buckets.
+## History and local data
 
-Continuous estimates require at least four completed buckets with three positive-consumption buckets, roughly one valid observed hour or more. Daily averages require completed dates with at least one hour of valid observations. One observed date may not represent typical use. Long polling gaps and reset jumps are excluded rather than treated as idle use.
+Select 24 hours, 7 days, 30 days, or another available range at the bottom of History. Your last selection survives restart. The 5-hour series is blue and weekly is purple. Small rings mark a 100% start, a 0% end, or the last observation before reset.
 
-These are conditional approximations, not exact exhaustion timestamps or task/token counts. The panel warns when reset precedes projected continuous exhaustion. Future reset quota is not added, and unobserved consumption may be omitted.
+Lines visually join polling gaps; unobserved consumption is excluded from calculations. Bars show hourly consumption for the 24-hour view, or 24 equal intervals for longer views. A drop from 70% to 60% is 10 percentage points.
 
-한국어로 된 계산 원리와 연구 근거는 [분석 기간과 예측](분석%20기간과%20예측.md)을 확인하세요.
+Retention is 90 days by default, selectable as 30/90/180/365 days. Display range and retention are separate. Select a longer range if older records are outside the current view. Records that were never collected cannot be recovered afterward.
 
-## Local data and privacy
+Settings and records are stored in `%LOCALAPPDATA%\GPTUsageTaskbar\` on each PC, without automatic synchronization. Saving history retains a recovery backup. **Delete history** removes both records and the backup. Expired records do not return when retention is increased.
 
-Settings, quota history, and alert state are stored in `%LOCALAPPDATA%\GPTUsageTaskbar\`. The existing folder name is retained for compatibility.
+The widget does not store passwords, API keys, or conversations. Quota retrieval uses your existing Codex sign-in and internet connection.
 
-The widget does not read or store authentication files, passwords, API keys, or conversations. It requests quota information through the installed Codex CLI's app-server interface. Refreshing usage does not submit a model inference request. Codex CLI may contact OpenAI using its own authentication and network configuration.
+## Estimates
 
-## Windows integration
+**Continuous work** estimates how long quota will last at the observed work intensity without breaks. **Weekly days** uses average consumption on completed observed dates and is independent of continuous-work hours.
 
-The widget is a separate borderless window over the taskbar. It does not inject code into Explorer or reserve taskbar button space. Adjust its position if it overlaps other buttons. It displays on the primary taskbar, follows size and DPI changes, and hides when the taskbar is hidden or a fullscreen application is active. Vertical and unusually small taskbars may have positioning limitations.
+Average work hours are an approximation from positive-consumption intervals. Estimates wait when data is insufficient and can vary with task type and missing observations. Forecast lookback is selectable as 1/3/7/14 days, default 7.
 
-## Build and verify
+계산의 의미는 [한국어 예측 안내](분석%20기간과%20예측.md)를 확인하세요.
 
-Build from the repository directory using the Windows .NET Framework C# compiler. No external packages are installed.
+## Troubleshooting
+
+- If quota is unavailable, check Codex sign-in and internet access, then click the widget.
+- If CLI discovery fails, set `CODEX_USAGE_CLI` to the full path to `codex.exe`.
+- If history ends earlier than expected, check the last refresh time and selected range. The widget must be running to collect records.
+- Executables are unsigned. Follow your organization's policy and verify the source of the download if Windows blocks execution.
+
+## Build from source
+
+Run in PowerShell from the source directory. Builds also run automated checks.
 
 ```powershell
 .\build.ps1
-```
-
-This creates `bin/GPTUsageWidget.exe` and runs automated checks. To build the English edition:
-
-```powershell
 .\build.ps1 -English
 ```
 
-To build and test both editions and create release ZIPs with SHA-256 checksums:
+Executables are created in `bin`. Create both release ZIPs and SHA-256 files in `dist`:
 
 ```powershell
 .\package.ps1
 ```
 
-Release builds use separate directories under `artifacts` and do not overwrite the running widget. The script checks archive file lists, checksums, and contents against the current build and documentation. To verify existing packages:
+## License
 
-```powershell
-.\tools\CheckRelease.ps1
-```
+Released under the [MIT license](LICENSE). Preserve the copyright and license when modifying or redistributing. See [the changelog](CHANGELOG.md).
 
-한국어 ZIP에는 실행 파일·간단 사용 가이드·예측 설명·MIT 라이선스를 포함합니다. 영어 ZIP에는 실행 파일·이 README·MIT 라이선스를 포함합니다. 개인 설정·기록·인증 정보·진단 파일·바로가기는 제외합니다.
-
-GitHub Actions verifies both editions on `main` pushes, pull requests, version tags, and manual runs. Check [Actions](https://github.com/eespark/gpt-usage-widget/actions). Publish both ZIPs and their `.sha256` files through [Releases](https://github.com/eespark/gpt-usage-widget/releases).
-
-`--render-demo` generates previews with simulated data. `--probe` and `--diagnose` write diagnostic files that must not be included in public distribution.
-
-## References and license
-
-The implementation uses C# and WinForms. The reference projects below use Rust; their project trees, dependencies, and source files are not included here. Common Codex protocols and Windows APIs can produce similarities. This is not a comprehensive code-similarity audit.
-
-- [CodexPeek](https://github.com/lch5518/CodexPeek)
-- [codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor)
-- [Microsoft extended window styles](https://learn.microsoft.com/en-us/windows/win32/winmsg/extended-window-styles)
-
-Source code and the project's own icon are distributed under the [MIT license](LICENSE). See [the changelog](CHANGELOG.md). This project is not affiliated with OpenAI. Executables are unsigned; compatibility can vary with taskbar configuration and Codex installation.
+Reference projects: [CodexPeek](https://github.com/lch5518/CodexPeek), [codex-usage-monitor](https://github.com/upstream-ray/codex-usage-monitor).
